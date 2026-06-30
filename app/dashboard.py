@@ -27,6 +27,9 @@ from src.graph import (
 )
 from src.metrics import calcular_centralidades, detectar_comunidades, resumo_rede
 
+# Paleta discreta compativel com todas as versoes do Plotly
+_OA_PALETTE = ["#01696f", "#4f98a3", "#a3cdd1", "#e07b54", "#f2c57c", "#c0c0c0"]
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -42,7 +45,7 @@ st.set_page_config(
 with st.sidebar:
     st.image(
         "https://openalex.org/img/openalex-logo.png",
-        use_column_width=True,
+        use_container_width=True,
     )
     st.header("⚙️ Configurações")
     tipo_grafo = st.radio("Tipo de grafo", ["Co-autoria", "Co-conceito"])
@@ -60,7 +63,6 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner="Carregando dados...")
 def carregar_dados():
-    # Tenta encontrar o JSON independente de onde o app é executado
     candidatos = [
         Path("data/raw/works_ufms_cs.json"),
         Path("../data/raw/works_ufms_cs.json"),
@@ -129,7 +131,6 @@ tab_grafo, tab_centralidade, tab_eda, tab_papers = st.tabs([
 
 # ===== ABA 1: GRAFO =========================================================
 with tab_grafo:
-    # Comunidades
     try:
         comunidades = detectar_comunidades(G)
         nx.set_node_attributes(G, comunidades, "community")
@@ -139,7 +140,6 @@ with tab_grafo:
         comunidades = {n: 0 for n in G.nodes()}
         n_com = 1
 
-    # Busca por autor
     busca = st.text_input("🔍 Destacar autor", placeholder="Digite parte do nome...")
 
     pos = nx.spring_layout(G, seed=42, k=0.5)
@@ -157,7 +157,6 @@ with tab_grafo:
     node_color = [comunidades.get(n, 0) for n in node_names]
     node_size = [6 + G.degree(n) * 3 for n in node_names]
 
-    # Destaque de busca
     if busca:
         node_color = [
             999 if busca.lower() in n.lower() else comunidades.get(n, 0)
@@ -207,7 +206,6 @@ with tab_grafo:
     )
     st.plotly_chart(fig_grafo, use_container_width=True)
 
-    # Stats de comunidades
     if n_com > 1:
         with st.expander("🧩 Tamanho das comunidades"):
             tamanhos = pd.Series(comunidades.values()).value_counts().sort_index()
@@ -223,7 +221,6 @@ with tab_grafo:
 # ===== ABA 2: CENTRALIDADE ==================================================
 with tab_centralidade:
     col_esq, col_dir = st.columns([1, 1])
-
     df_metrics = calcular_centralidades(G)
 
     with col_esq:
@@ -232,10 +229,8 @@ with tab_centralidade:
             df_metrics.head(top_n)[
                 ["node", "degree_raw", "betweenness", "eigenvector", "clustering"]
             ].rename(columns={
-                "node": "Nó",
-                "degree_raw": "Grau",
-                "betweenness": "Betweenness",
-                "eigenvector": "Eigenvector",
+                "node": "Nó", "degree_raw": "Grau",
+                "betweenness": "Betweenness", "eigenvector": "Eigenvector",
                 "clustering": "Clustering",
             }),
             use_container_width=True,
@@ -254,8 +249,6 @@ with tab_centralidade:
         st.plotly_chart(fig_grau, use_container_width=True)
 
     st.divider()
-
-    # Scatter betweenness x eigenvector
     st.subheader("🔍 Betweenness vs Eigenvector")
     fig_scatter = px.scatter(
         df_metrics.head(100),
@@ -275,7 +268,6 @@ with tab_centralidade:
 with tab_eda:
     col1, col2 = st.columns(2)
 
-    # Publicações por ano
     anos = [w.get("publication_year") for w in works if w.get("publication_year")]
     with col1:
         st.subheader("📅 Publicações por Ano")
@@ -288,7 +280,6 @@ with tab_eda:
         fig_ano.update_layout(margin=dict(t=10))
         st.plotly_chart(fig_ano, use_container_width=True)
 
-    # Open Access
     oa = [w.get("open_access", {}).get("oa_status", "unknown") for w in works]
     with col2:
         st.subheader("🔓 Status Open Access")
@@ -302,7 +293,6 @@ with tab_eda:
         fig_oa.update_layout(margin=dict(t=10))
         st.plotly_chart(fig_oa, use_container_width=True)
 
-    # Top conceitos
     col3, col4 = st.columns(2)
     conceitos_todos = [
         c["display_name"]
@@ -324,7 +314,6 @@ with tab_eda:
         fig_conc.update_layout(margin=dict(t=10), yaxis=dict(autorange="reversed"))
         st.plotly_chart(fig_conc, use_container_width=True)
 
-    # Top autores
     autores_todos = [
         a["author"]["display_name"]
         for w in works
@@ -380,7 +369,6 @@ with tab_papers:
         hide_index=True,
     )
 
-    # Scatter citações por ano
     st.subheader("📈 Citações ao Longo do Tempo")
     fig_cit = px.scatter(
         df_filtrado,
@@ -390,7 +378,7 @@ with tab_papers:
         color="OA",
         size="Citações",
         size_max=40,
-        color_discrete_sequence=px.colors.qualitative.Teal,
+        color_discrete_sequence=_OA_PALETTE,   # fix: era px.colors.qualitative.Teal
         labels={"Ano": "Ano de Publicação"},
     )
     fig_cit.update_layout(margin=dict(t=10))
