@@ -7,6 +7,7 @@ Executar com:
 """
 
 import json
+from collections import Counter
 from pathlib import Path
 import sys
 
@@ -26,123 +27,371 @@ from src.graph import (
 )
 from src.metrics import calcular_centralidades, detectar_comunidades, resumo_rede
 
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="OpenAlex Knowledge Graph",
     page_icon="🔬",
     layout="wide",
 )
 
-st.title("🔬 OpenAlex Knowledge Graph")
-st.caption("Mapeamento do conhecimento científico brasileiro via grafos de co-autoria e co-conceito.")
-
-# -- Sidebar ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
 with st.sidebar:
+    st.image(
+        "https://openalex.org/img/openalex-logo.png",
+        use_column_width=True,
+    )
     st.header("⚙️ Configurações")
     tipo_grafo = st.radio("Tipo de grafo", ["Co-autoria", "Co-conceito"])
     min_degree = st.slider("Grau mínimo do nó", 1, 10, 2)
     apenas_maior_componente = st.checkbox("Apenas maior componente", value=True)
-    top_n = st.slider("Top N nós por centralidade", 5, 50, 20)
+    top_n = st.slider("Top N por centralidade", 5, 50, 20)
+    st.divider()
+    st.caption(
+        "Dados coletados via [OpenAlex API](https://openalex.org). "
+        "Licença CC0."
+    )
 
-# -- Carregamento de dados ----------------------------------------------------
-@st.cache_data
+# ---------------------------------------------------------------------------
+# Carregamento de dados
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner="Carregando dados...")
 def carregar_dados():
-    caminho = Path("data/raw/works_ufms_cs.json")
-    if not caminho.exists():
-        st.warning("Arquivo não encontrado. Execute o notebook 01_coleta.ipynb primeiro.")
-        return []
-    with open(caminho) as f:
-        return json.load(f)
+    # Tenta encontrar o JSON independente de onde o app é executado
+    candidatos = [
+        Path("data/raw/works_ufms_cs.json"),
+        Path("../data/raw/works_ufms_cs.json"),
+        Path(__file__).parent.parent / "data" / "raw" / "works_ufms_cs.json",
+    ]
+    for p in candidatos:
+        if p.exists():
+            with open(p) as f:
+                return json.load(f)
+    return []
 
 works = carregar_dados()
 
 if not works:
-    st.info("Execute `notebooks/01_coleta.ipynb` para coletar os dados e recarregue esta página.")
+    st.warning(
+        "⚠️ Arquivo `data/raw/works_ufms_cs.json` não encontrado. "
+        "Execute `notebooks/01_coleta.ipynb` primeiro e recarregue a página."
+    )
     st.stop()
 
-# -- Construção do grafo ------------------------------------------------------
-@st.cache_resource
+# ---------------------------------------------------------------------------
+# Construção do grafo (cacheado)
+# ---------------------------------------------------------------------------
+@st.cache_resource(show_spinner="Construindo grafo...")
 def construir(_works, tipo, min_deg, maior_comp):
-    G = construir_grafo_coautoria(_works) if tipo == "Co-autoria" else construir_grafo_conceito(_works)
+    G = (
+        construir_grafo_coautoria(_works)
+        if tipo == "Co-autoria"
+        else construir_grafo_conceito(_works)
+    )
     G = filtrar_grafo(G, min_degree=min_deg)
-    if maior_comp:
+    if maior_comp and G.number_of_nodes() > 0:
         G = maior_componente(G)
     return G
 
 G = construir(works, tipo_grafo, min_degree, apenas_maior_componente)
 
-# -- KPIs ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Header + KPIs globais
+# ---------------------------------------------------------------------------
+st.title("🔬 OpenAlex Knowledge Graph")
+st.caption(
+    f"**{len(works):,} papers** coletados · "
+    "Instituições brasileiras (2018–2026) · Área: Computer Science"
+)
+
 resumo = resumo_rede(G)
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Nós", resumo["nodes"])
-c2.metric("Arestas", resumo["edges"])
-c3.metric("Densidade", resumo["density"])
-c4.metric("Grau médio", resumo["avg_degree"])
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("👤 Nós", f"{resumo['nodes']:,}")
+c2.metric("🔗 Arestas", f"{resumo['edges']:,}")
+c3.metric("🌐 Densidade", resumo["density"])
+c4.metric("📊 Grau Médio", resumo["avg_degree"])
+c5.metric("🧩 Componentes", resumo["components"])
 
 st.divider()
 
-# -- Tabela + Histograma ------------------------------------------------------
-col_esq, col_dir = st.columns([1, 1])
+# ---------------------------------------------------------------------------
+# Abas
+# ---------------------------------------------------------------------------
+tab_grafo, tab_centralidade, tab_eda, tab_papers = st.tabs([
+    "🕸️ Grafo",
+    "🏆 Centralidade",
+    "📈 EDA",
+    "📚 Top Papers",
+])
 
-with col_esq:
-    st.subheader(f"🏆 Top {top_n} por Betweenness Centrality")
+# ===== ABA 1: GRAFO =========================================================
+with tab_grafo:
+    # Comunidades
+    try:
+        comunidades = detectar_comunidades(G)
+        nx.set_node_attributes(G, comunidades, "community")
+        n_com = len(set(comunidades.values()))
+        st.caption(f"🧩 {n_com} comunidades detectadas (Louvain)")
+    except Exception:
+        comunidades = {n: 0 for n in G.nodes()}
+        n_com = 1
+
+    # Busca por autor
+    busca = st.text_input("🔍 Destacar autor", placeholder="Digite parte do nome...")
+
+    pos = nx.spring_layout(G, seed=42, k=0.5)
+
+    edge_x, edge_y = [], []
+    for u, v in G.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+
+    node_names = list(G.nodes())
+    node_x = [pos[n][0] for n in node_names]
+    node_y = [pos[n][1] for n in node_names]
+    node_color = [comunidades.get(n, 0) for n in node_names]
+    node_size = [6 + G.degree(n) * 3 for n in node_names]
+
+    # Destaque de busca
+    if busca:
+        node_color = [
+            999 if busca.lower() in n.lower() else comunidades.get(n, 0)
+            for n in node_names
+        ]
+        node_size = [
+            20 if busca.lower() in n.lower() else 6 + G.degree(n) * 3
+            for n in node_names
+        ]
+
+    hover_text = [
+        f"<b>{n}</b><br>Grau: {G.degree(n)}<br>Comunidade: {comunidades.get(n, '?')}"
+        for n in node_names
+    ]
+
+    fig_grafo = go.Figure()
+    fig_grafo.add_trace(go.Scatter(
+        x=edge_x, y=edge_y, mode="lines",
+        line=dict(width=0.4, color="#cccccc"),
+        hoverinfo="none",
+    ))
+    fig_grafo.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text" if G.number_of_nodes() < 60 else "markers",
+        marker=dict(
+            size=node_size,
+            color=node_color,
+            colorscale="Viridis",
+            showscale=True,
+            colorbar=dict(title="Comunidade", thickness=12),
+            line=dict(width=0.5, color="white"),
+        ),
+        text=node_names,
+        textposition="top center",
+        textfont=dict(size=7),
+        hovertext=hover_text,
+        hoverinfo="text",
+    ))
+    fig_grafo.update_layout(
+        height=620,
+        showlegend=False,
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        margin=dict(t=10, b=10, l=10, r=10),
+        plot_bgcolor="#0e1117",
+        paper_bgcolor="#0e1117",
+    )
+    st.plotly_chart(fig_grafo, use_container_width=True)
+
+    # Stats de comunidades
+    if n_com > 1:
+        with st.expander("🧩 Tamanho das comunidades"):
+            tamanhos = pd.Series(comunidades.values()).value_counts().sort_index()
+            fig_com = px.bar(
+                x=tamanhos.index.astype(str),
+                y=tamanhos.values,
+                labels={"x": "Comunidade", "y": "Número de nós"},
+                color_discrete_sequence=["#01696f"],
+            )
+            fig_com.update_layout(margin=dict(t=10))
+            st.plotly_chart(fig_com, use_container_width=True)
+
+# ===== ABA 2: CENTRALIDADE ==================================================
+with tab_centralidade:
+    col_esq, col_dir = st.columns([1, 1])
+
     df_metrics = calcular_centralidades(G)
+
+    with col_esq:
+        st.subheader(f"🏆 Top {top_n} — Betweenness")
+        st.dataframe(
+            df_metrics.head(top_n)[
+                ["node", "degree_raw", "betweenness", "eigenvector", "clustering"]
+            ].rename(columns={
+                "node": "Nó",
+                "degree_raw": "Grau",
+                "betweenness": "Betweenness",
+                "eigenvector": "Eigenvector",
+                "clustering": "Clustering",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with col_dir:
+        st.subheader("📊 Distribuição de Grau")
+        graus = [d for _, d in G.degree()]
+        fig_grau = px.histogram(
+            x=graus, nbins=30,
+            labels={"x": "Grau", "y": "Frequência"},
+            color_discrete_sequence=["#01696f"],
+        )
+        fig_grau.update_layout(showlegend=False, margin=dict(t=10))
+        st.plotly_chart(fig_grau, use_container_width=True)
+
+    st.divider()
+
+    # Scatter betweenness x eigenvector
+    st.subheader("🔍 Betweenness vs Eigenvector")
+    fig_scatter = px.scatter(
+        df_metrics.head(100),
+        x="eigenvector",
+        y="betweenness",
+        size="degree_raw",
+        hover_name="node",
+        size_max=30,
+        color="betweenness",
+        color_continuous_scale="Teal",
+        labels={"eigenvector": "Eigenvector", "betweenness": "Betweenness"},
+    )
+    fig_scatter.update_layout(margin=dict(t=10))
+    st.plotly_chart(fig_scatter, use_container_width=True)
+
+# ===== ABA 3: EDA ===========================================================
+with tab_eda:
+    col1, col2 = st.columns(2)
+
+    # Publicações por ano
+    anos = [w.get("publication_year") for w in works if w.get("publication_year")]
+    with col1:
+        st.subheader("📅 Publicações por Ano")
+        fig_ano = px.bar(
+            x=sorted(set(anos)),
+            y=[anos.count(a) for a in sorted(set(anos))],
+            labels={"x": "Ano", "y": "Papers"},
+            color_discrete_sequence=["#01696f"],
+        )
+        fig_ano.update_layout(margin=dict(t=10))
+        st.plotly_chart(fig_ano, use_container_width=True)
+
+    # Open Access
+    oa = [w.get("open_access", {}).get("oa_status", "unknown") for w in works]
+    with col2:
+        st.subheader("🔓 Status Open Access")
+        oa_counts = pd.Series(Counter(oa)).sort_values(ascending=False)
+        fig_oa = px.pie(
+            names=oa_counts.index,
+            values=oa_counts.values,
+            color_discrete_sequence=px.colors.sequential.Teal,
+            hole=0.4,
+        )
+        fig_oa.update_layout(margin=dict(t=10))
+        st.plotly_chart(fig_oa, use_container_width=True)
+
+    # Top conceitos
+    col3, col4 = st.columns(2)
+    conceitos_todos = [
+        c["display_name"]
+        for w in works
+        for c in w.get("concepts", [])[:3]
+        if c.get("display_name")
+    ]
+    top_conceitos = pd.Series(Counter(conceitos_todos)).nlargest(20)
+
+    with col3:
+        st.subheader("🧠 Top 20 Conceitos")
+        fig_conc = px.bar(
+            x=top_conceitos.values,
+            y=top_conceitos.index,
+            orientation="h",
+            labels={"x": "Ocorrências", "y": ""},
+            color_discrete_sequence=["#4f98a3"],
+        )
+        fig_conc.update_layout(margin=dict(t=10), yaxis=dict(autorange="reversed"))
+        st.plotly_chart(fig_conc, use_container_width=True)
+
+    # Top autores
+    autores_todos = [
+        a["author"]["display_name"]
+        for w in works
+        for a in w.get("authorships", [])
+        if a.get("author") and a["author"].get("display_name")
+    ]
+    top_autores = pd.Series(Counter(autores_todos)).nlargest(20)
+
+    with col4:
+        st.subheader("👤 Top 20 Autores")
+        fig_aut = px.bar(
+            x=top_autores.values,
+            y=top_autores.index,
+            orientation="h",
+            labels={"x": "Papers", "y": ""},
+            color_discrete_sequence=["#01696f"],
+        )
+        fig_aut.update_layout(margin=dict(t=10), yaxis=dict(autorange="reversed"))
+        st.plotly_chart(fig_aut, use_container_width=True)
+
+# ===== ABA 4: TOP PAPERS ====================================================
+with tab_papers:
+    st.subheader("📚 Papers Mais Citados")
+
+    df_papers = pd.DataFrame([{
+        "Título": (w.get("title") or "N/A")[:90],
+        "Ano": w.get("publication_year"),
+        "Citações": w.get("cited_by_count", 0),
+        "OA": w.get("open_access", {}).get("oa_status", "?"),
+        "URL": (w.get("primary_location") or {}).get("landing_page_url") or "",
+    } for w in works])
+
+    col_f1, col_f2 = st.columns(2)
+    ano_min, ano_max = int(df_papers["Ano"].min()), int(df_papers["Ano"].max())
+    with col_f1:
+        intervalo = st.slider("Intervalo de anos", ano_min, ano_max, (ano_min, ano_max))
+    with col_f2:
+        status_oa = st.multiselect(
+            "Status Open Access",
+            options=df_papers["OA"].unique().tolist(),
+            default=df_papers["OA"].unique().tolist(),
+        )
+
+    df_filtrado = df_papers[
+        df_papers["Ano"].between(*intervalo) &
+        df_papers["OA"].isin(status_oa)
+    ].sort_values("Citações", ascending=False)
+
+    st.caption(f"{len(df_filtrado):,} papers no filtro atual")
     st.dataframe(
-        df_metrics.head(top_n)[["node", "degree_raw", "betweenness", "eigenvector", "clustering"]]
-        .rename(columns={
-            "node": "Nó", "degree_raw": "Grau",
-            "betweenness": "Betweenness", "eigenvector": "Eigenvector",
-            "clustering": "Clustering",
-        }),
+        df_filtrado.drop(columns=["URL"]).head(50),
         use_container_width=True,
+        hide_index=True,
     )
 
-with col_dir:
-    st.subheader("📊 Distribuição de Grau")
-    graus = [d for _, d in G.degree()]
-    fig = px.histogram(x=graus, nbins=30, labels={"x": "Grau", "y": "Frequência"},
-                       color_discrete_sequence=["#01696f"])
-    fig.update_layout(showlegend=False, margin=dict(t=10))
-    st.plotly_chart(fig, use_container_width=True)
-
-st.divider()
-
-# -- Visualização do grafo ----------------------------------------------------
-st.subheader("🕸️ Visualização do Grafo")
-
-try:
-    comunidades = detectar_comunidades(G)
-    nx.set_node_attributes(G, comunidades, "community")
-except Exception:
-    comunidades = {n: 0 for n in G.nodes()}
-
-pos = nx.spring_layout(G, seed=42, k=0.5)
-
-edge_x, edge_y = [], []
-for u, v in G.edges():
-    x0, y0 = pos[u]; x1, y1 = pos[v]
-    edge_x += [x0, x1, None]; edge_y += [y0, y1, None]
-
-node_x = [pos[n][0] for n in G.nodes()]
-node_y = [pos[n][1] for n in G.nodes()]
-node_color = [comunidades.get(n, 0) for n in G.nodes()]
-node_size = [5 + G.degree(n) * 2 for n in G.nodes()]
-
-fig_grafo = go.Figure()
-fig_grafo.add_trace(go.Scatter(
-    x=edge_x, y=edge_y, mode="lines",
-    line=dict(width=0.5, color="#cccccc"), hoverinfo="none"
-))
-fig_grafo.add_trace(go.Scatter(
-    x=node_x, y=node_y,
-    mode="markers+text" if G.number_of_nodes() < 80 else "markers",
-    marker=dict(size=node_size, color=node_color, colorscale="Viridis", showscale=True),
-    text=list(G.nodes()), textposition="top center", textfont=dict(size=8),
-    hoverinfo="text",
-))
-fig_grafo.update_layout(
-    height=600, showlegend=False,
-    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-    margin=dict(t=10, b=10, l=10, r=10),
-)
-st.plotly_chart(fig_grafo, use_container_width=True)
+    # Scatter citações por ano
+    st.subheader("📈 Citações ao Longo do Tempo")
+    fig_cit = px.scatter(
+        df_filtrado,
+        x="Ano",
+        y="Citações",
+        hover_name="Título",
+        color="OA",
+        size="Citações",
+        size_max=40,
+        color_discrete_sequence=px.colors.qualitative.Teal,
+        labels={"Ano": "Ano de Publicação"},
+    )
+    fig_cit.update_layout(margin=dict(t=10))
+    st.plotly_chart(fig_cit, use_container_width=True)
