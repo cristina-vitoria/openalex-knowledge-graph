@@ -16,7 +16,6 @@ build/
 
 # Dados brutos (grandes demais para o repositório)
 data/raw/*.json
-data/processed/*.csv
 
 # Variáveis de ambiente
 .env
