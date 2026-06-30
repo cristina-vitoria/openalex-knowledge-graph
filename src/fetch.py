@@ -16,7 +16,7 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 # ROR IDs de grandes universidades brasileiras
 INSTITUICAO_ROR = {
-    "UFMS":    "https://ror.org/00mj4fy29",
+    "UFMS":    "https://ror.org/0366d2847",
     "USP":     "https://ror.org/036rp1748",
     "UNICAMP": "https://ror.org/04wffgt70",
     "UFRJ":    "https://ror.org/03490as77",
