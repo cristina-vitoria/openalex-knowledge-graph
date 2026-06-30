@@ -6,6 +6,7 @@ tqdm>=4.66
 # Manipulação de dados
 pandas>=2.0
 numpy>=1.26
+scipy==1.18
 
 # Grafos
 networkx>=3.2
