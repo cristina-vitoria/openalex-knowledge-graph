@@ -16,10 +16,20 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 # ROR IDs de grandes universidades brasileiras
 INSTITUICAO_ROR = {
-    "UFMS":    "https://ror.org/0366d2847",
+    "UFMS":    "https://ror.org/00mj4fy29",
     "USP":     "https://ror.org/036rp1748",
     "UNICAMP": "https://ror.org/04wffgt70",
     "UFRJ":    "https://ror.org/03490as77",
+}
+
+# IDs de tópicos OpenAlex (campo `topics.id`) para áreas comuns.
+# Consulte https://openalex.org/topics para encontrar outros IDs.
+TOPICO_ID = {
+    "Computer Science":  "https://openalex.org/T11576",
+    "Machine Learning":  "https://openalex.org/T11247",
+    "Bioacoustics":      "https://openalex.org/T10330",
+    "Knowledge Graph":   "https://openalex.org/T10697",
+    "Data Science":      "https://openalex.org/T12328",
 }
 
 
@@ -27,32 +37,50 @@ def buscar_works(
     instituicao_ror: str,
     ano_inicio: int = 2018,
     ano_fim: int = 2026,
+    topico_id: str | None = None,
     conceito: str = "Computer Science",
     limite: int = 1000,
 ) -> list:
     """
-    Busca publicações de uma instituição filtradas por conceito e período.
+    Busca publicações de uma instituição filtradas por tópico e período.
+
+    Args:
+        instituicao_ror: URL ROR da instituição.
+        ano_inicio: Ano mínimo de publicação.
+        ano_fim: Ano máximo de publicação.
+        topico_id: URL do tópico OpenAlex (ex: TOPICO_ID['Machine Learning']).
+                   Se None, usa o mapeamento pelo nome em `conceito`.
+        conceito: Nome do conceito para lookup em TOPICO_ID.
+        limite: Número máximo de resultados.
 
     Returns:
         Lista de dicts com os campos selecionados.
     """
-    query = (
+    tid = topico_id or TOPICO_ID.get(conceito)
+
+    q = (
         Works()
         .filter(
-            institutions={"ror": instituicao_ror},
+            authorships={"institutions": {"ror": instituicao_ror}},
             publication_year=f"{ano_inicio}-{ano_fim}",
         )
-        .search_filter(concepts={"display_name": conceito})
         .select([
             "id", "title", "publication_year",
-            "authorships", "concepts",
+            "authorships", "concepts", "topics",
             "cited_by_count", "primary_location",
             "open_access",
         ])
     )
 
+    # Filtro de tópico é opcional — sem ele retorna tudo da instituição
+    if tid:
+        q = q.filter(topics={"id": tid})
+
     resultados = []
-    for pagina in tqdm(query.paginate(per_page=200, n_max=limite), desc="Coletando papers"):
+    for pagina in tqdm(
+        q.paginate(per_page=200, n_max=limite),
+        desc=f"Coletando papers ({conceito})",
+    ):
         resultados.extend(pagina)
 
     return resultados
@@ -78,6 +106,7 @@ if __name__ == "__main__":
     works = buscar_works(
         instituicao_ror=INSTITUICAO_ROR["UFMS"],
         ano_inicio=2018,
+        conceito="Computer Science",
         limite=500,
     )
     salvar_raw(works, "works_ufms_cs")
