@@ -11,7 +11,7 @@ from pyalex import Works
 
 pyalex.config.email = "seu@email.com"  # polite pool -> prioridade na fila
 
-RAW_DIR = Path("data/raw")
+RAW_DIR = Path("../data/raw")
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 # ROR IDs de grandes universidades brasileiras
