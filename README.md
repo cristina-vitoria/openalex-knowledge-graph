@@ -116,7 +116,3 @@ streamlit run app/dashboard.py
 | `streamlit` | Dashboard web |
 
 ---
-
-## 📄 Licença
-
-MIT © [Vitória Cristina](https://github.com/cristina-vitoria)
