@@ -27,6 +27,7 @@ from src.graph import (
 )
 from src.metrics import calcular_centralidades, detectar_comunidades, resumo_rede
 
+# Paleta discreta compativel com todas as versoes do Plotly
 _OA_PALETTE = ["#01696f", "#4f98a3", "#a3cdd1", "#e07b54", "#f2c57c", "#c0c0c0"]
 
 # ---------------------------------------------------------------------------
@@ -42,38 +43,14 @@ st.set_page_config(
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.image(
-        "https://openalex.org/img/openalex-logo.png",
-        use_container_width=True,
-    )
     st.header("⚙️ Configurações")
     tipo_grafo = st.radio("Tipo de grafo", ["Co-autoria", "Co-conceito"])
     min_degree = st.slider("Grau mínimo do nó", 1, 10, 2)
     apenas_maior_componente = st.checkbox("Apenas maior componente", value=True)
     top_n = st.slider("Top N por centralidade", 5, 50, 20)
     st.divider()
-
-    # Glossário na sidebar
-    with st.expander("📖 Glossário de Métricas"):
-        st.markdown("""
-**Grau (Degree)**
-Número de colaboradores diretos. Alto grau = autor prolífico.
-
-**Betweenness**
-Frequência com que o autor aparece no caminho mais curto entre dois outros. Alto betweenness = **ponte** entre grupos.
-
-**Eigenvector**
-Peso das conexões pelos vizinhos: colaborar com autores importantes eleva este valor. Lógica similar ao PageRank.
-
-**Clustering**
-O quanto os colaboradores de um autor também colaboram entre si. Alto = grupo coeso e fechado.
-
-**Comunidade (Louvain)**
-Grupo de autores que publicam mais entre si do que com o restante da rede. Tende a corresponder a grupos de pesquisa ou linhas temáticas.
-        """)
     st.caption(
         "Dados coletados via [OpenAlex API](https://openalex.org). "
-        "Licença CC0."
     )
 
 # ---------------------------------------------------------------------------
@@ -129,16 +106,11 @@ st.caption(
 
 resumo = resumo_rede(G)
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("👤 Nós", f"{resumo['nodes']:,}",
-          help="Total de autores no componente selecionado")
-c2.metric("🔗 Arestas", f"{resumo['edges']:,}",
-          help="Total de pares de autores que co-assinaram ao menos 1 paper")
-c3.metric("🌐 Densidade", resumo["density"],
-          help="Fração de arestas existentes vs possíveis. Próximo de 0 = rede esparsa")
-c4.metric("📊 Grau Médio", resumo["avg_degree"],
-          help="Número médio de colaboradores diretos por autor")
-c5.metric("🧩 Componentes", resumo["components"],
-          help="Subgrafos desconectados. 1 = toda a rede está conectada")
+c1.metric("👤 Nós", f"{resumo['nodes']:,}")
+c2.metric("🔗 Arestas", f"{resumo['edges']:,}")
+c3.metric("🌐 Densidade", resumo["density"])
+c4.metric("📊 Grau Médio", resumo["avg_degree"])
+c5.metric("🧩 Componentes", resumo["components"])
 
 st.divider()
 
@@ -158,18 +130,10 @@ with tab_grafo:
         comunidades = detectar_comunidades(G)
         nx.set_node_attributes(G, comunidades, "community")
         n_com = len(set(comunidades.values()))
+        st.caption(f"🧩 {n_com} comunidades detectadas (Louvain)")
     except Exception:
         comunidades = {n: 0 for n in G.nodes()}
         n_com = 1
-
-    # Interpretação das comunidades
-    st.info(
-        f"🧩 **{n_com} comunidades detectadas** pelo algoritmo de Louvain — "
-        "cada cor representa um grupo de autores que colaboram mais intensamente "
-        "entre si do que com o restante da rede. No contexto de co-autoria, "
-        "comunidades tendem a corresponder a **grupos de pesquisa** ou **linhas temáticas** "
-        "de uma mesma instituição. Nós maiores têm maior grau (mais colaboradores diretos)."
-    )
 
     busca = st.text_input("🔍 Destacar autor", placeholder="Digite parte do nome...")
 
@@ -235,7 +199,7 @@ with tab_grafo:
         plot_bgcolor="#0e1117",
         paper_bgcolor="#0e1117",
     )
-    st.plotly_chart(fig_grafo, use_container_width=True)
+    st.plotly_chart(fig_grafo, width="stretch")
 
     if n_com > 1:
         with st.expander("🧩 Tamanho das comunidades"):
@@ -243,25 +207,14 @@ with tab_grafo:
             fig_com = px.bar(
                 x=tamanhos.index.astype(str),
                 y=tamanhos.values,
-                labels={"x": "Comunidade", "y": "Número de autores"},
+                labels={"x": "Comunidade", "y": "Número de nós"},
                 color_discrete_sequence=["#01696f"],
             )
             fig_com.update_layout(margin=dict(t=10))
-            st.plotly_chart(fig_com, use_container_width=True)
-            st.caption(
-                "Comunidades grandes geralmente representam grupos de pesquisa consolidados. "
-                "Comunidades pequenas (2–3 nós) podem ser colaborações pontuais entre instituições."
-            )
+            st.plotly_chart(fig_com, width="stretch")
 
 # ===== ABA 2: CENTRALIDADE ==================================================
 with tab_centralidade:
-    st.caption(
-        "💡 **Como ler esta aba:** Betweenness alto = autor-ponte entre grupos. "
-        "Eigenvector alto = colabora com autores influentes. "
-        "Clustering alto = grupo coeso e fechado. "
-        "Veja o glossário completo na barra lateral."
-    )
-
     col_esq, col_dir = st.columns([1, 1])
     df_metrics = calcular_centralidades(G)
 
@@ -271,35 +224,12 @@ with tab_centralidade:
             df_metrics.head(top_n)[
                 ["node", "degree_raw", "betweenness", "eigenvector", "clustering"]
             ].rename(columns={
-                "node": "Autor", "degree_raw": "Grau",
+                "node": "Nó", "degree_raw": "Grau",
                 "betweenness": "Betweenness", "eigenvector": "Eigenvector",
                 "clustering": "Clustering",
             }),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
-            column_config={
-                "Betweenness": st.column_config.ProgressColumn(
-                    "Betweenness",
-                    help="Frequência nos caminhos mais curtos. Alto = ponte entre grupos.",
-                    format="%.4f",
-                    min_value=0,
-                    max_value=float(df_metrics["betweenness"].max()),
-                ),
-                "Eigenvector": st.column_config.ProgressColumn(
-                    "Eigenvector",
-                    help="Influência ponderada pelos vizinhos. Alto = conectado a autores importantes.",
-                    format="%.4f",
-                    min_value=0,
-                    max_value=float(df_metrics["eigenvector"].max()),
-                ),
-                "Clustering": st.column_config.ProgressColumn(
-                    "Clustering",
-                    help="Coesão do grupo. Alto = colaboradores também se colaboram entre si.",
-                    format="%.3f",
-                    min_value=0,
-                    max_value=1.0,
-                ),
-            },
         )
 
     with col_dir:
@@ -307,23 +237,14 @@ with tab_centralidade:
         graus = [d for _, d in G.degree()]
         fig_grau = px.histogram(
             x=graus, nbins=30,
-            labels={"x": "Grau (nº de colaboradores)", "y": "Número de autores"},
+            labels={"x": "Grau", "y": "Frequência"},
             color_discrete_sequence=["#01696f"],
         )
         fig_grau.update_layout(showlegend=False, margin=dict(t=10))
-        st.plotly_chart(fig_grau, use_container_width=True)
-        st.caption(
-            "Redes de co-autoria tipicamente seguem uma distribuição de lei de potência — "
-            "poucos autores com muitos colaboradores, muitos com poucos."
-        )
+        st.plotly_chart(fig_grau, width="stretch")
 
     st.divider()
     st.subheader("🔍 Betweenness vs Eigenvector")
-    st.caption(
-        "Autores no **canto superior direito** são os mais estratégicos: "
-        "servem de ponte entre grupos *e* estão conectados a pesquisadores influentes. "
-        "O tamanho do círculo representa o grau (nº de colaboradores)."
-    )
     fig_scatter = px.scatter(
         df_metrics.head(100),
         x="eigenvector",
@@ -333,13 +254,10 @@ with tab_centralidade:
         size_max=30,
         color="betweenness",
         color_continuous_scale="Teal",
-        labels={
-            "eigenvector": "Eigenvector (influência dos vizinhos)",
-            "betweenness": "Betweenness (ponte entre grupos)",
-        },
+        labels={"eigenvector": "Eigenvector", "betweenness": "Betweenness"},
     )
     fig_scatter.update_layout(margin=dict(t=10))
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_scatter, width="stretch")
 
 # ===== ABA 3: EDA ===========================================================
 with tab_eda:
@@ -355,7 +273,7 @@ with tab_eda:
             color_discrete_sequence=["#01696f"],
         )
         fig_ano.update_layout(margin=dict(t=10))
-        st.plotly_chart(fig_ano, use_container_width=True)
+        st.plotly_chart(fig_ano, width="stretch")
 
     oa = [w.get("open_access", {}).get("oa_status", "unknown") for w in works]
     with col2:
@@ -368,7 +286,7 @@ with tab_eda:
             hole=0.4,
         )
         fig_oa.update_layout(margin=dict(t=10))
-        st.plotly_chart(fig_oa, use_container_width=True)
+        st.plotly_chart(fig_oa, width="stretch")
 
     col3, col4 = st.columns(2)
     conceitos_todos = [
@@ -389,7 +307,7 @@ with tab_eda:
             color_discrete_sequence=["#4f98a3"],
         )
         fig_conc.update_layout(margin=dict(t=10), yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig_conc, use_container_width=True)
+        st.plotly_chart(fig_conc, width="stretch")
 
     autores_todos = [
         a["author"]["display_name"]
@@ -409,7 +327,7 @@ with tab_eda:
             color_discrete_sequence=["#01696f"],
         )
         fig_aut.update_layout(margin=dict(t=10), yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig_aut, use_container_width=True)
+        st.plotly_chart(fig_aut, width="stretch")
 
 # ===== ABA 4: TOP PAPERS ====================================================
 with tab_papers:
@@ -442,7 +360,7 @@ with tab_papers:
     st.caption(f"{len(df_filtrado):,} papers no filtro atual")
     st.dataframe(
         df_filtrado.drop(columns=["URL"]).head(50),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -455,8 +373,8 @@ with tab_papers:
         color="OA",
         size="Citações",
         size_max=40,
-        color_discrete_sequence=_OA_PALETTE,
+        color_discrete_sequence=_OA_PALETTE,   # fix: era px.colors.qualitative.Teal
         labels={"Ano": "Ano de Publicação"},
     )
     fig_cit.update_layout(margin=dict(t=10))
-    st.plotly_chart(fig_cit, use_container_width=True)
+    st.plotly_chart(fig_cit, width="stretch")
