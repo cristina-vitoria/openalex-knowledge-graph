@@ -1,0 +1,32 @@
+# Ambientes virtuais
+.venv/
+env/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Dados brutos (grandes demais para o repositório)
+data/raw/*.json
+data/processed/*.csv
+
+# Variáveis de ambiente
+.env
+*.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

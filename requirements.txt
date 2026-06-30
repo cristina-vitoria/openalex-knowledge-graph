@@ -1,0 +1,25 @@
+# Coleta de dados
+pyalex>=0.15
+requests>=2.31
+tqdm>=4.66
+
+# Manipulação de dados
+pandas>=2.0
+numpy>=1.26
+
+# Grafos
+networkx>=3.2
+python-louvain>=0.16
+pyvis>=0.3
+
+# Visualização
+matplotlib>=3.7
+seaborn>=0.13
+plotly>=5.18
+
+# Dashboard
+streamlit>=1.32
+
+# Notebooks
+jupyterlab>=4.0
+ipywidgets>=8.0
