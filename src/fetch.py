@@ -22,14 +22,11 @@ INSTITUICAO_ROR = {
     "UFRJ":    "https://ror.org/03490as77",
 }
 
-# IDs de tópicos OpenAlex (campo `topics.id`) para áreas comuns.
-# Consulte https://openalex.org/topics para encontrar outros IDs.
-TOPICO_ID = {
-    "Computer Science":  "https://openalex.org/T11576",
-    "Machine Learning":  "https://openalex.org/T11247",
-    "Bioacoustics":      "https://openalex.org/T10330",
-    "Knowledge Graph":   "https://openalex.org/T10697",
-    "Data Science":      "https://openalex.org/T12328",
+# IDs de "field" do OpenAlex (segundo nível da hierarquia domain/field/subfield/topic).
+# 17 = Computer Science. Para confirmar ou achar outros, consulte:
+# https://api.openalex.org/topics?search=computer science&select=id,display_name,field
+FIELD_ID = {
+    "Computer Science": 17,
 }
 
 
@@ -37,26 +34,28 @@ def buscar_works(
     instituicao_ror: str,
     ano_inicio: int = 2018,
     ano_fim: int = 2026,
-    topico_id: str | None = None,
-    conceito: str = "Computer Science",
+    field_id: int = FIELD_ID["Computer Science"],
+    apenas_topico_primario: bool = False,
     limite: int = 1000,
 ) -> list:
     """
-    Busca publicações de uma instituição filtradas por tópico e período.
+    Busca publicações de uma instituição filtradas por field (área) e período.
 
     Args:
         instituicao_ror: URL ROR da instituição.
         ano_inicio: Ano mínimo de publicação.
         ano_fim: Ano máximo de publicação.
-        topico_id: URL do tópico OpenAlex (ex: TOPICO_ID['Machine Learning']).
-                   Se None, usa o mapeamento pelo nome em `conceito`.
-        conceito: Nome do conceito para lookup em TOPICO_ID.
+        field_id: ID numérico do field do OpenAlex (default 17 = Computer Science).
+        apenas_topico_primario: Se True, filtra por `primary_topic.field.id`
+            (mais restrito: só considera o tópico principal do work). Se False,
+            filtra por `topics.field.id` (mais abrangente: basta o field aparecer
+            entre os tópicos secundários do work também).
         limite: Número máximo de resultados.
 
     Returns:
         Lista de dicts com os campos selecionados.
     """
-    tid = topico_id or TOPICO_ID.get(conceito)
+    campo_filtro = "primary_topic" if apenas_topico_primario else "topics"
 
     q = (
         Works()
@@ -64,6 +63,7 @@ def buscar_works(
             authorships={"institutions": {"ror": instituicao_ror}},
             publication_year=f"{ano_inicio}-{ano_fim}",
         )
+        .filter(**{campo_filtro: {"field": {"id": field_id}}})
         .select([
             "id", "title", "publication_year",
             "authorships", "concepts", "topics",
@@ -72,14 +72,10 @@ def buscar_works(
         ])
     )
 
-    # Filtro de tópico é opcional — sem ele retorna tudo da instituição
-    if tid:
-        q = q.filter(topics={"id": tid})
-
     resultados = []
     for pagina in tqdm(
         q.paginate(per_page=200, n_max=limite),
-        desc=f"Coletando papers ({conceito})",
+        desc=f"Coletando papers (field {field_id})",
     ):
         resultados.extend(pagina)
 
@@ -106,7 +102,7 @@ if __name__ == "__main__":
     works = buscar_works(
         instituicao_ror=INSTITUICAO_ROR["UFMS"],
         ano_inicio=2018,
-        conceito="Computer Science",
+        field_id=FIELD_ID["Computer Science"],
         limite=500,
     )
     salvar_raw(works, "works_ufms_cs")
