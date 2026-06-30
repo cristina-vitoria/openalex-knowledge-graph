@@ -5,8 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![NetworkX](https://img.shields.io/badge/NetworkX-3.x-orange)](https://networkx.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Em%20desenvolvimento-yellow)](#)
+[![Status](https://img.shields.io/badge/Status-Finalizado-yellow)](#)
 
 ---
 
@@ -23,9 +22,9 @@ Este projeto responde essas perguntas construindo e analisando grafos de co-auto
 | Atributo | Valor |
 |---|---|
 | Fonte | [OpenAlex API](https://docs.openalex.org) |
-| Escopo | Publicações de instituições brasileiras (CS, 2018–2026) |
-| Volume (estimado) | ~1.000 papers · ~1.500 autores · ~3.000 conceitos |
-| Licença dos dados | CC0 (domínio público) |
+| Escopo | Publicações da UFMS (CS, 2018–2026) |
+| Volume | 600 papers |
+| Licença dos dados | domínio público |
 | Custo de acesso | Gratuito, sem autenticação |
 
 ---
@@ -87,19 +86,13 @@ streamlit run app/dashboard.py
 
 ## 🔍 Análises
 
-- [ ] EDA: distribuição temporal, top autores, top conceitos
-- [ ] Grafo de co-autoria (autores como nós, co-autoria como arestas)
-- [ ] Grafo de co-conceito (temas como nós, co-ocorrência como arestas)
-- [ ] Métricas: degree, betweenness, eigenvector centrality
-- [ ] Detecção de comunidades (algoritmo de Louvain)
-- [ ] Evolução temporal da rede
-- [ ] Dashboard interativo com Streamlit
-
----
-
-## 💡 Principais Insights
-
-> *Seção a ser preenchida após conclusão das análises.*
+- EDA: distribuição temporal, top autores, top conceitos
+- Grafo de co-autoria (autores como nós, co-autoria como arestas)
+- Grafo de co-conceito (temas como nós, co-ocorrência como arestas)
+- Métricas: degree, betweenness, eigenvector centrality
+- Detecção de comunidades (algoritmo de Louvain)
+- Evolução temporal da rede
+- Dashboard interativo com Streamlit
 
 ---
 
