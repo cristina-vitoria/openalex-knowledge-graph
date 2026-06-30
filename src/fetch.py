@@ -62,6 +62,7 @@ def buscar_works(
         .filter(
             authorships={"institutions": {"ror": instituicao_ror}},
             publication_year=f"{ano_inicio}-{ano_fim}",
+            type="article",
         )
         .filter(**{campo_filtro: {"field": {"id": field_id}}})
         .select([
